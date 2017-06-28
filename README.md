@@ -1,2 +1,2 @@
 # TSDBScale
-A time series system based on the OpenTSDB protocol and TimescaleDB as a data store
+A time series system based on the [OpenTSDB](http://opentsdb.net) protocol and [TimescaleDB](http://www.timescale.com) as a data store
