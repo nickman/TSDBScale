@@ -147,6 +147,7 @@ COMMENT ON COLUMN TSD_FQN_TAGPAIR.TAGPAIR_IDS IS 'An array of the tagpairs, one 
 ALTER TABLE TSD_FQN_TAGPAIR ADD CONSTRAINT TSD_FQN_TAGPAIR_PK PRIMARY KEY ( FQN_TP_ID ) ;
 CREATE UNIQUE INDEX TSD_FQN_TAGPAIR_AK ON TSD_FQN_TAGPAIR (FQN_TP_ID);
 CREATE UNIQUE INDEX TSD_FQN_TAGPAIR_IND ON TSD_FQN_TAGPAIR (TAGPAIR_IDS, FQNID);
+create unique index tsd_fqn_tagpair_str_ind on tsd_fqn_tagpair(TAGPAIR_STR, FQNID);
 
 
 -- =================================================================
@@ -425,6 +426,21 @@ END;
 $D$
 LANGUAGE PLPGSQL;
 
+CREATE OR REPLACE FUNCTION metric_ids(metricName text)
+  RETURNS NUMERIC[] AS
+$BODY$
+DECLARE
+  metric_ids_arr NUMERIC[];    
+BEGIN
+  select array_agg(metric_id) into metric_ids_arr from tsd_metric where name like replace(metricName, '*', '%');
+  return metric_ids_arr;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+
+
 CREATE OR REPLACE FUNCTION TAGPAIRID(id numeric) RETURNS TEXT[] AS  $D$  
 DECLARE
     KV TEXT[] = ARRAY['', ''];
@@ -622,7 +638,6 @@ DECLARE
     TSLEN SMALLINT;
     TSNUM NUMERIC;
     IDS NUMERIC[] = ARRAY[]::integer[];
-    
 BEGIN
     jtype = jsonb_typeof(metricjson);
     IF(jtype='object') THEN
@@ -662,11 +677,11 @@ BEGIN
 
       LOOP   
   TAGPAIR = tagpair(TAGREC.KEY, TAGREC.VALUE);
-  RAISE NOTICE 'Ordered Tag Pair: %=%', TAGREC.KEY, TAGREC.VALUE;
+  --RAISE NOTICE 'Ordered Tag Pair: %=%', TAGREC.KEY, TAGREC.VALUE;
   TAGPAIRS = TAGPAIRS || TAGPAIR;
       END LOOP;
-      RAISE NOTICE 'METRIC: %', metric->>'metric';
-      RAISE NOTICE 'TAGPAIRS: %', TAGPAIRS;
+      --RAISE NOTICE 'METRIC: %', metric->>'metric';
+      --RAISE NOTICE 'TAGPAIRS: %', TAGPAIRS;
       METRICID = METRIC(metric->>'metric');
       SELECT T.FQNID INTO FQN_ID 
       FROM TSD_FQN_TAGPAIR P, TSD_TSMETA T
@@ -678,7 +693,7 @@ BEGIN
     SELECT NEXTVAL('FQN_SEQ') INTO FQN_ID;
     INSERT INTO TSD_TSMETA (FQNID, VERSION, METRIC_ID, FQN)
     VALUES ( FQN_ID, 1, METRICID, flatten(metric));
-    INSERT INTO TSD_FQN_TAGPAIR (FQN_TP_ID, FQNID, TAGPAIR_IDS, TAGS)
+    INSERT INTO TSD_FQN_TAGPAIR (FQN_TP_ID, FQNID, TAGPAIR_IDS, TATAGS)
     VALUES (FQN_TAGPAIR_ID, FQN_ID, TAGPAIRS, TAGCOUNT);
       END IF;
     -- =================================================================================
@@ -714,6 +729,144 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 
+CREATE OR REPLACE FUNCTION tsd_id_for_ids(metricjson jsonb)
+  RETURNS JSONB AS
+$BODY$
+DECLARE
+    actual JSONB;
+    jtype TEXT;
+    metric JSONB;
+    TAGS JSON;
+    TAGPAIRS NUMERIC[];
+    TAGPAIR NUMERIC;
+    METRICID NUMERIC;
+    TAGCOUNT INT;
+    TAGREC record;
+    MREC RECORD;
+    FQN_TAGPAIR_ID NUMERIC;
+    FQN_ID NUMERIC;
+    FQN TEXT;
+    TS TIMESTAMP;
+    TSSTR TEXT;
+    TSSTRSECS TEXT;
+    TSLEN SMALLINT;
+    TSNUM NUMERIC;
+    IDMAP JSONB  = jsonb_build_object();
+    FLATMETRIC TEXT[];
+BEGIN
+    jtype = jsonb_typeof(metricjson);
+    IF(jtype='object') THEN
+  actual = jsonb_build_array(metricjson);
+    ELSEIF(jtype='array') THEN
+  actual = metricjson;
+    ELSE
+  RAISE 'Invalid Metric JSON: %. Not array or object', metricjson;
+    END IF;
+    -- 
+    FOR MREC IN SELECT * FROM jsonb_array_elements(actual) LOOP
+      TAGPAIRS = ARRAY[]::NUMERIC[];
+      metric = MREC.value;
+      IF(metric ?& array['metric','tags']) THEN
+    -- NOTHING
+      ELSE
+    RAISE NOTICE 'Invalid Metric JSON: %. Missing metric or tags', metric;
+      END IF;
+      TAGS = metric->'tags';
+      SELECT COUNT(*) INTO TAGCOUNT FROM (SELECT * FROM json_object_keys(TAGS)) X;
+      IF(TAGCOUNT=0 OR TAGCOUNT > 8) THEN 
+    RAISE NOTICE 'Invalid Metric JSON: %. Invalid Tag Count: %', metric, TAGCOUNT; 
+      END IF;
+      FOR TAGREC IN SELECT J.KEY, J.VALUE 
+      FROM json_each_text(TAGS) J
+      LOOP
+  PERFORM TAGK(TAGREC.KEY);
+  PERFORM TAGV(TAGREC.VALUE);
+      END LOOP;
+      
+      FOR TAGREC IN SELECT J.KEY, J.VALUE 
+      FROM json_each_text(TAGS) J, TSD_TAGK K
+      WHERE J.KEY = K.NAME
+      ORDER  BY K.SORT, K.NAME
+
+      LOOP   
+  TAGPAIR = tagpair(TAGREC.KEY, TAGREC.VALUE);
+  --RAISE NOTICE 'Ordered Tag Pair: %=%', TAGREC.KEY, TAGREC.VALUE;
+  TAGPAIRS = TAGPAIRS || TAGPAIR;
+      END LOOP;
+  FLATMETRIC = array[flatten(metric)];
+      --RAISE NOTICE 'METRIC: %', metric->>'metric';
+      --RAISE NOTICE 'TAGPAIRS: %', TAGPAIRS;
+      METRICID = METRIC(metric->>'metric');
+      SELECT T.FQNID INTO FQN_ID 
+      FROM TSD_FQN_TAGPAIR P, TSD_TSMETA T
+      WHERE P.FQNID = T.FQNID
+      AND T.METRIC_ID = METRICID
+      AND TAGPAIR_IDS = TAGPAIRS;
+      IF NOT FOUND THEN  
+    SELECT NEXTVAL('FQN_TP_SEQ') INTO FQN_TAGPAIR_ID;
+    SELECT NEXTVAL('FQN_SEQ') INTO FQN_ID;
+    INSERT INTO TSD_TSMETA (FQNID, VERSION, METRIC_ID, FQN)
+    VALUES ( FQN_ID, 1, METRICID, FLATMETRIC[1]);
+    INSERT INTO TSD_FQN_TAGPAIR (FQN_TP_ID, FQNID, TAGPAIR_IDS, TAGS)
+    VALUES (FQN_TAGPAIR_ID, FQN_ID, TAGPAIRS, TAGCOUNT);
+      END IF;
+    
+    -- =================================================================================
+    --  Value Processing
+    -- =================================================================================
+      IF(metric ?& array['value']) THEN
+    TSSTR = trim(metric->>'timestamp');
+    IF(TSSTR IS NULL) THEN
+      IF(metric ?& array['timesecs']) THEN
+        TSSTR = trim(metric->>'timesecs');
+        TSNUM = CAST(TSSTR as NUMERIC);
+        TS = to_timestamp(TSNUM);
+      ELSE
+        TS = now();
+      END IF;
+    ELSE
+      TSNUM = CAST(TSSTR as NUMERIC);
+      TS = to_timestamp(TSNUM::double precision / 1000);
+    END IF;
+    BEGIN
+  INSERT INTO TSDB VALUES(TS, FQN_ID, CAST(metric->>'value' as NUMERIC));
+  EXCEPTION
+    WHEN unique_violation THEN
+      perform pg_notify('ERRORS', 'UNIQ VIOL ON TSDB [' || TS || ',' || FQN_ID || ']');
+    END;
+    END IF;
+    raise notice 'metric: id: %, name: %, ex: %', FQN_ID, FLATMETRIC, IDMAP->FLATMETRIC[1];
+    if(IDMAP->FLATMETRIC[1] IS NULL) THEN
+  IDMAP = jsonb_insert(IDMAP, FLATMETRIC, jsonb('' || FQN_ID));
+    END IF;
+    END LOOP;
+    -- =================================================================================
+    raise notice 'idmap: %', IDMAP;
+    RETURN IDMAP;
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+
+
+
+CREATE OR REPLACE FUNCTION fqnids(fqnpattern text)
+  RETURNS SETOF NUMERIC AS
+$func$
+select fqnid from tsd_tsmeta where fqnid in (
+ select unnest(test_dynamic(fqnpattern))
+)
+$func$  LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION fqns(fqnpattern text)
+  RETURNS SETOF TEXT AS
+$func$
+select fqn from tsd_tsmeta where fqnid in (
+ select unnest(test_dynamic(fqnpattern))
+)
+$func$  LANGUAGE sql IMMUTABLE;
+
 
 CREATE OR REPLACE FUNCTION tsd_id(metric text)
   RETURNS numeric AS
@@ -727,20 +880,38 @@ $BODY$
 
 
 
-
-
-CREATE OR REPLACE FUNCTION put(metric jsonb)
-  RETURNS JSON AS
+CREATE OR REPLACE FUNCTION fast_put(times numeric[], ids numeric[], vals numeric[])
+  RETURNS int[] AS
 $BODY$
 DECLARE
-    TAGS JSON;
-    TAGPAIRS NUMERIC[];
-    
+  success int = 0;
+  failed int = 0;
+  tcount int = array_length(times, 1);
+  icount int = array_length(ids, 1);
+  vcount int = array_length(vals, 1);
 BEGIN
+    if(tcount != icount OR icount != vcount) THEN
+  raise exception 'Uneven array sizes: times: %, ids: %, values: %', tcount, icount, vcount;
+    END IF;
+    FOR i in 1..tcount LOOP
+        BEGIN
+  INSERT INTO TSDB (time, fqnid, value)
+  VALUES (to_timestamp(times[i]::double precision / 1000), ids[i], vals[i]);
+  success = success + 1;
+  EXCEPTION WHEN OTHERS THEN
+    failed = failed + 1;    
+  END;
+    END LOOP;
+    RETURN array[success, failed];
 END;
 $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
+
+
+
+
+
 
 
 CREATE OR REPLACE FUNCTION tss()
@@ -946,4 +1117,27 @@ select array["1", "2", "3", "4", "5"] from (
   unnest(tagpairs_for_kv('type', '*')) as "5"
 ) as rx
 
+select tsd_id(jsonb('[' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal3", "host" : "web01", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal4", "host" : "web01", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal5", "host" : "web01", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal3", "host" : "web02", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal4", "host" : "web02", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal5", "host" : "web02", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal3", "host" : "web03", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal4", "host" : "web03", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal5", "host" : "web03", "app" : "edge-web"}, "timestamp" : $ts, "value" : 384734}' ||  
+  ']'))
 
+
+select tsd_id_for_ids(jsonb('[' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal3", "host" : "web01", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal4", "host" : "web01", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal5", "host" : "web01", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal3", "host" : "web02", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal4", "host" : "web02", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal5", "host" : "web02", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal3", "host" : "web03", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal4", "host" : "web03", "app" : "edge-web"}},' ||
+    '{"metric" : "sys.cpu", "tags" : {"dc" : "dal5", "host" : "web03", "app" : "edge-web"}}' ||  
+  ']'))
