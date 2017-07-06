@@ -1,0 +1,16 @@
+Reactive Web
+Jersey (JAX-RS)
+DevTools
+Websocket
+Rest Repositories
+Rest Repositories HAL Browser
+Reactive MongoDB
+Reactive Redis
+Config Client
+Hystrix
+Hystrix Dashboard
+Zipkin Client
+Stream Kafka
+Kafka
+Actuator
+Actuator Docs
