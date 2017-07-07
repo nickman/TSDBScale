@@ -176,6 +176,24 @@ public class JSONOps {
 		      throw new JSONException(e);
 		    }
 		  }
+		  
+		  /**
+		   * Reads and parses the data from the passed byte array into a JsonNode
+		   * 
+		   * @param bytes
+		   *          The byte array to read from
+		   * @return the parsed JsonNode
+		   */
+		  public static JsonNode parseToNode(final byte[] bytes) {
+		    if (bytes == null)
+		      throw new IllegalArgumentException("byte array was null");
+		    try {
+		      return jsonMapper.readTree(bytes);
+		    } catch (Exception e) {
+		      throw new JSONException(e);
+		    }
+		  }
+		  
 
 		  /**
 		   * Reads and parses the data from the passed URL into a JsonNode

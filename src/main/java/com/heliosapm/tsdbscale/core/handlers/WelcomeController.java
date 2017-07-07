@@ -12,6 +12,11 @@
 // see <http://www.gnu.org/licenses/>.
 package com.heliosapm.tsdbscale.core.handlers;
 
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+
 /**
  * <p>Title: WelcomeController</p>
  * <p>Description: </p> 
@@ -21,14 +26,45 @@ package com.heliosapm.tsdbscale.core.handlers;
  */
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+
+import com.heliosapm.tsdbscale.core.TSDBMetricRepository;
+import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
+import com.heliosapm.tsdbscale.util.JSONOps;
+
+import reactor.core.publisher.Flux;
 
 @RestController
 public class WelcomeController {
+	
+	@Autowired
+	protected TSDBMetricRepository repo = null;
 
 	@GetMapping("/")
 	public String welcome() {
 		return "Hello World";
 	}
+	
+	@GetMapping("/resolve/{expression}")
+	public String resolveGet(@PathVariable("expression") final String expression) {
+		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
+		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
+	}
+	
+	@PostMapping("/resolve")
+	public String resolvePut(@RequestBody final String expression) {
+		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
+		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
+	}
+	
+	@PostMapping("/async/resolve")
+	public Flux<TSDBMetric> asyncResolvePut(@RequestBody final String expression) {
+		return repo.resolveMetrics(expression);
+		
+	}
+	
 
 }

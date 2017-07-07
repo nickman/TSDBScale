@@ -64,6 +64,10 @@ public class TSDBMetricSerialization {
 		public void serialize(TSDBMetric value, JsonGenerator gen, SerializerProvider serializers)
 				throws IOException, JsonProcessingException {
 			gen.writeStartObject();
+			long id = value.getMetricId();
+			if(id > -1) {
+				gen.writeNumberField("id", id);
+			}
 			gen.writeStringField("metric", value.getMetricName());
 			gen.writeFieldName("tags");
 			gen.writeStartObject();
@@ -83,8 +87,8 @@ public class TSDBMetricSerialization {
 			
 			Map<String, String> tags = JSONOps.parseToObject(node.get("tags"), JSONOps.TR_STR_STR_HASH_MAP);
 			String metricName = node.get("metric").textValue();
-			
-			return new TSDBMetric(metricName, tags);
+			long id = node.get("id").asLong(-1L);
+			return new TSDBMetric(metricName, tags, id);
 		}
 	}
 	

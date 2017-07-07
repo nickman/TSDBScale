@@ -21,7 +21,7 @@ import com.heliosapm.tsdbscale.util.JSONOps;
 
 /**
  * <p>Title: MetricsTest</p>
- * <p>Description: </p> 
+ * <p>Description:TSDBMetric tests</p> 
  * <p>Company: Helios Development Group LLC</p>
  * @author Whitehead (nwhitehead AT heliosdev DOT org)
  * <p><code>com.heliosapm.tsdbscale.core.MetricsTest</code></p>

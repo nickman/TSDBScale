@@ -39,7 +39,10 @@ public class TSDBMetric {
 	private final String metricName;
 	/** The tags */
 	private final SortedMap<String, String> tags = new TreeMap<String, String>(TagKeySorter.INSTANCE);
+	/** The metric id, only present when retrieved from service */
+	private long metricId = -1;
 	
+
 	static {
 		JSONOps.registerDeserializer(TSDBMetric.class, new TSDBMetricJsonDeserializer());
 		JSONOps.registerSerializer(TSDBMetric.class, new TSDBMetricJsonSerializer());
@@ -59,6 +62,11 @@ public class TSDBMetric {
 			this.tags.put(entry.getKey().trim().toLowerCase(), entry.getValue().trim().toLowerCase());
 		}
 		// TODO: add default tags if not present
+	}
+	
+	TSDBMetric(final String metricName, final Map<String, String> tags, final long id) {
+		this(metricName, tags);
+		metricId = id;
 	}
 	
 	/**
@@ -81,6 +89,10 @@ public class TSDBMetric {
 	}
 	
 
+	public TSDBMetric(final String metricName, final long id, final String... tags) {
+		this(metricName, tags);
+		metricId = id;
+	}
 
 	/**
 	 * Returns the metric name
@@ -107,8 +119,18 @@ public class TSDBMetric {
 		return new StringBuilder(metricName)
 			.append(":")
 			.append(tags)
+			.append(metricId < 0 ? "" : ("[" + metricId + "]"))
 			.toString();
 	}
+	
+	/**
+	 * Returns the metric id if assigned, otherwise will be <b>-1</b>
+	 * @return the metricId
+	 */
+	public long getMetricId() {
+		return metricId;
+	}
+	
 
 	/**
 	 * {@inheritDoc}

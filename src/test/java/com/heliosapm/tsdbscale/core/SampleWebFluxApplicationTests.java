@@ -31,9 +31,10 @@ public class SampleWebFluxApplicationTests {
 
 	@Test
 	public void testEcho() throws Exception {
-		this.webClient.post().uri("/echo")
-				.body(Mono.just("{\"Hello WebFlux!\""), String.class).exchange()
-				.expectBody(String.class).isEqualTo("{\"Hello WebFlux!\"");
+		this.webClient.post().uri("/echo").accept(MediaType.TEXT_PLAIN)
+				.contentType(MediaType.TEXT_PLAIN)
+				.body(Mono.just("Hello WebFlux!"), String.class).exchange()
+				.expectBody(String.class).isEqualTo("Hello WebFlux");
 	}
 
 }
