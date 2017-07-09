@@ -87,7 +87,10 @@ public class TSDBMetricSerialization {
 			
 			Map<String, String> tags = JSONOps.parseToObject(node.get("tags"), JSONOps.TR_STR_STR_HASH_MAP);
 			String metricName = node.get("metric").textValue();
-			long id = node.get("id").asLong(-1L);
+			long id = -1;
+			if(node.has("id")) {
+				id = node.get("id").asLong(-1L);
+			}
 			return new TSDBMetric(metricName, tags, id);
 		}
 	}

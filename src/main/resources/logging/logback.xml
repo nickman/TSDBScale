@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <jmxConfigurator/>
+  <include resource="defaults.xml" />
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>
+        %d{ISO8601} %-5level [%thread] %logger{0}: %msg%n
+      </pattern>
+    </encoder>
+  </appender>
+  
+  <!-- This appender is responsible for the /logs endpoint. It maintains MaxSize 
+       lines of the log file in memory. If you don't need the endpoint, disable
+       this appender (by removing the line "<appender-ref ref="CYCLIC"/>" in
+       the "root" section below) to save some cycles and memory. -->
+  <appender name="CYCLIC" class="ch.qos.logback.core.read.CyclicBufferAppender">
+    <MaxSize>1024</MaxSize>
+  </appender>
+  
+  
+  
+  <!-- Per class logger levels -->
+  
+  <!-- Fallthrough root logger and router -->
+  <root level="INFO">
+    <appender-ref ref="STDOUT"/>
+    <appender-ref ref="CYCLIC"/>
+    <!-- Uncomment to log to file -->
+    <!--<appender-ref ref="FILE"/>-->
+  </root>
+</configuration>

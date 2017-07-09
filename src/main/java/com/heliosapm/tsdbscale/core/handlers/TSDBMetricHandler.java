@@ -14,8 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
-import com.heliosapm.tsdbscale.core.TSDBMetricRepository;
 import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
+import com.heliosapm.tsdbscale.core.repositories.TSDBMetricRepository;
 import com.heliosapm.tsdbscale.util.JSONOps;
 
 import reactor.core.publisher.Mono;

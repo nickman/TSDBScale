@@ -1,7 +1,7 @@
 /**
  * 
  */
-package com.heliosapm.tsdbscale.core;
+package com.heliosapm.tsdbscale.core.repositories;
 
 import com.heliosapm.tsdbscale.core.metrics.*;
 import reactor.core.publisher.Flux;
@@ -16,6 +16,7 @@ public interface TSDBMetricRepository {
 	public Mono<TSDBMetric> getMetric(long metricId);
 	public Flux<TSDBMetric> resolveMetrics(Mono<String> expression);
 	public Flux<TSDBMetric> resolveMetrics3(Mono<String> expression);
+	public Flux<TSDBMetric> resolveMetricsFast(String expression);
 	
 	
 }

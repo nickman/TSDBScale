@@ -16,8 +16,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.ansi.AnsiOutput;
+import org.springframework.boot.ansi.AnsiOutput.Enabled;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfiguration;
+import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.netflix.hystrix.EnableHystrix;
 import org.springframework.cloud.netflix.hystrix.dashboard.EnableHystrixDashboard;
@@ -25,11 +29,13 @@ import org.springframework.cloud.sleuth.SpanNamer;
 import org.springframework.cloud.sleuth.TraceKeys;
 import org.springframework.cloud.sleuth.Tracer;
 import org.springframework.cloud.sleuth.instrument.async.TraceableScheduledExecutorService;
-import org.springframework.cloud.sleuth.reactor.SpanSubscriber;
-import org.springframework.cloud.sleuth.reactor.TraceReactorAutoConfiguration;
+import org.springframework.cloud.sleuth.instrument.reactive.SpanSubscriber;
+import org.springframework.cloud.sleuth.instrument.reactive.TraceReactorAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.mongodb.core.SimpleMongoDbFactory;
+import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRepositories;
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.retry.annotation.EnableRetry;
@@ -55,7 +61,9 @@ import reactor.ipc.netty.http.server.HttpServer;
 import reactor.util.context.Context;
 
 
-@SpringBootApplication
+@SpringBootApplication(exclude = { MongoAutoConfiguration.class, MongoDataAutoConfiguration.class })
+
+@EnableReactiveMongoRepositories
 @EnableRetry
 @EnableDiscoveryClient
 @EnableAutoConfiguration
@@ -80,11 +88,20 @@ public class CoreApplication implements InitializingBean {
 		System.setProperty("spring.application.name", "tsdb-scale");
 		System.setProperty("spring.sleuth.reactor.enabled", "true");
 		System.setProperty("spring.sleuth.enabled", "true");
+		System.setProperty("spring.sleuth.sampler.percentage", "1.0");
 		
+		System.setProperty("spring.sleuth.reactor.enabled", "true");
+		
+		AnsiOutput.setEnabled(Enabled.ALWAYS);
 		
 		SpringApplication.run(CoreApplication.class, args);
 	}
 	
+	
+//	@Bean
+//	public SimpleMongoDbFactory mongoDbFactory() {
+//		return new SimpleMongoDbFactory();
+//	}
 
 	@Bean
 	public RouterFunction<ServerResponse> monoRouterFunction(EchoHandler echoHandler, TSDBMetricHandler metricHandler) {
@@ -135,7 +152,7 @@ public class CoreApplication implements InitializingBean {
 	 */
 	@Override
 	public void afterPropertiesSet() throws Exception {
-		setupHooks();
+		//setupHooks();
 		
 	}
 	

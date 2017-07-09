@@ -1,9 +1,11 @@
 /**
  * 
  */
-package com.heliosapm.tsdbscale.core;
+package com.heliosapm.tsdbscale.core.repositories;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -15,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.sleuth.Span;
 import org.springframework.cloud.sleuth.SpanAccessor;
 import org.springframework.cloud.sleuth.Tracer;
-import org.springframework.cloud.sleuth.sampler.AlwaysSampler;
 import org.springframework.stereotype.Repository;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -48,7 +49,7 @@ public class TSDBMetricRepositoryImpl implements TSDBMetricRepository {
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.tsdbscale.core.TSDBMetricRepository#resolveMetrics(java.lang.String)
+	 * @see com.heliosapm.tsdbscale.core.repositories.TSDBMetricRepository#resolveMetrics(java.lang.String)
 	 */
 	@Override
 	public Flux<TSDBMetric> resolveMetrics(String expression) {
@@ -56,34 +57,52 @@ public class TSDBMetricRepositoryImpl implements TSDBMetricRepository {
 		final Span span = tracer.createSpan("resolveMetricsX", parent);
 		span.tag("lc", "TSDBMetricRepository");
 		tracer.detach(span);
-		//tracer.addTag("resolveMetricExpr", expression);
-		try {
-			return tracer.wrap(new Callable<Flux<TSDBMetric>>(){
-				@Override
-				public Flux<TSDBMetric> call() throws Exception {
-					LOG.info("Resolving expression [{}]", expression);
-					final Observable<TSDBMetric> ob = db.queryRows("select * from putMetrics(jsonb($1::text))", expression)
-					.map(r -> r.get(0, ObjectNode.class))
-					.map(o -> JSONOps.parseToObject(o, TSDBMetric.class));
-					
-					return Flux.concat(RxReactiveStreams.toPublisher(ob)).doFinally(sig -> {
-						Span sp = tracer.continueSpan(span);
-						sp.tag("signal", sig.name());
-						
-						//span.tag("resolveMetrics", expression);
-						tracer.close(sp);
-					});				
-				}
-				public String toString() {
-					return "resolveMetricsCallable";
-				}
-			}).call();
-		} catch (Exception ex) {
-			LOG.error("Failed to execute resolveMetrics3", ex);
-			throw new RuntimeException(ex);
-		}
+		LOG.info("Resolving expression [{}]", expression);
+		final AtomicBoolean first = new AtomicBoolean(false);
+		final long start = System.nanoTime();
+		final long[] tt = new long[2];
+		final int[] count = new int[]{0};
+		final Observable<TSDBMetric> ob = db.queryRows("select * from putMetrics(jsonb($1::text))", expression)
+		.map(r -> {
+			count[0]++;
+			if(first.compareAndSet(false, true)) {
+				tt[0] = System.nanoTime() - start;				
+			}
+			return r.get(0, ObjectNode.class);
+		})
+		.map(o -> {
+			tt[1] = System.nanoTime() - start;
+			
+			tracer.continueSpan(span).tag("ttfr", "" + TimeUnit.NANOSECONDS.toMicros(tt[0]));
+			tracer.continueSpan(span).tag("ttlr", "" + TimeUnit.NANOSECONDS.toMicros(tt[1]));
+			tracer.continueSpan(span).tag("ttir", "" + TimeUnit.NANOSECONDS.toMicros(tt[1]-tt[0]));
+			tracer.continueSpan(span).tag("rows", "" + count[0]);
+			return JSONOps.parseToObject(o, TSDBMetric.class);
+		});
 		
+		return Flux.concat(RxReactiveStreams.toPublisher(ob)).doFinally(sig -> {
+			Span sp = tracer.continueSpan(span);
+			sp.tag("signal", sig.name());
+			
+			//span.tag("resolveMetrics", expression);
+			tracer.close(sp);
+		});				
 	}
+	
+	/**
+	 * {@inheritDoc}
+	 * @see com.heliosapm.tsdbscale.core.repositories.TSDBMetricRepository#resolveMetrics(java.lang.String)
+	 */
+	@Override
+	public Flux<TSDBMetric> resolveMetricsFast(String expression) {
+		final Observable<TSDBMetric> ob =
+				db.queryRows("select * from putMetrics(jsonb($1::text))", expression)
+				.map(r -> r.get(0, ObjectNode.class))				
+				.map(o -> JSONOps.parseToObject(o, TSDBMetric.class));
+				
+		return Flux.concat(RxReactiveStreams.toPublisher(ob));
+	}
+	
 	
 	public Flux<TSDBMetric> resolveMetrics(Mono<String> expression) {		
 		final AtomicReference<Publisher<TSDBMetric>> ref = new AtomicReference<Publisher<TSDBMetric>>(null); 
@@ -143,7 +162,7 @@ public class TSDBMetricRepositoryImpl implements TSDBMetricRepository {
 
 	/**
 	 * {@inheritDoc}
-	 * @see com.heliosapm.tsdbscale.core.TSDBMetricRepository#getMetric(long)
+	 * @see com.heliosapm.tsdbscale.core.repositories.TSDBMetricRepository#getMetric(long)
 	 */
 	@Override
 	public Mono<TSDBMetric> getMetric(long metricId) {
