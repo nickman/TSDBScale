@@ -37,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
 import com.heliosapm.tsdbscale.core.namespace.Namespace;
@@ -76,13 +77,19 @@ public class WelcomeController {
 	}
 
 	
-	
-	
 	@GetMapping("/resolve/{expression}")
-	public String resolveGet(@PathVariable("expression") final String expression) {
+	public Mono<ServerResponse> resolveGet(@PathVariable("expression") String expression) {
+		
 		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
-		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
+		return ServerResponse.ok().syncBody(JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()])));
 	}
+	
+	
+//	@GetMapping("/resolve/{expression}")
+//	public String resolveGet(@PathVariable("expression") final String expression) {
+//		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
+//		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
+//	}
 	
 	@PostMapping("/resolve")
 	public String resolvePut(@RequestBody final String expression) {

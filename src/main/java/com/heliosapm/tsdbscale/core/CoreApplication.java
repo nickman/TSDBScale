@@ -38,6 +38,8 @@ import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRep
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -55,6 +57,7 @@ import com.heliosapm.tsdbscale.core.handlers.TSDBMetricHandler;
 import com.heliosapm.tsdbscale.reactor.ReactorTrace;
 
 import reactor.core.publisher.Hooks;
+import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.ipc.netty.NettyContext;
 import reactor.ipc.netty.http.server.HttpServer;
@@ -111,13 +114,17 @@ public class CoreApplication implements InitializingBean {
 	public ReactorTrace reactorTrace() {
 		return new ReactorTrace();
 	}
+	
+//	@GetMapping("/resolve/{expression}")
+//	public Mono<ServerResponse> resolveGet(@PathVariable("expression") Mono<String> expression) {
+	
 
 	@Bean
-	public RouterFunction<ServerResponse> monoRouterFunction(EchoHandler echoHandler, TSDBMetricHandler metricHandler) {
-		return route(GET("/echo").and(accept(TEXT_PLAIN)), echoHandler::echo)
-		.andRoute(POST("/echo").and(contentType(TEXT_PLAIN)), echoHandler::echo)
-		.andRoute(GET("/metrics"), metricHandler::resolveGet)
-		.andRoute(POST("/metrics").and(contentType(APPLICATION_JSON)), metricHandler::resolvePut);
+	public RouterFunction<ServerResponse> monoRouterFunction(TSDBMetricHandler metricHandler) {
+		return route(GET("/resolve/{expression}").and(accept(APPLICATION_JSON)), metricHandler::resolveGet);
+//		.andRoute(POST("/echo").and(contentType(TEXT_PLAIN)), echoHandler::echo)
+//		.andRoute(GET("/metrics"), metricHandler::resolveGet)
+//		.andRoute(POST("/metrics").and(contentType(APPLICATION_JSON)), metricHandler::resolvePut);
 	}	
 	
 	@Bean(destroyMethod="close")
@@ -137,7 +144,7 @@ public class CoreApplication implements InitializingBean {
 	}
 	
 	@Bean("HttpServer")
-	public HttpServer httpServer(RouterFunction<ServerResponse> routerFunction) {
+	public HttpServer httpServer() {
 		HttpServer server = HttpServer.create(opt -> opt 
 			.listen("0.0.0.0", 8081)
 			.preferNative(true)			

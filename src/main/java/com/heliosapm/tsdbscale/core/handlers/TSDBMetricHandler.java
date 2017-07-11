@@ -10,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
@@ -25,7 +27,6 @@ import reactor.core.publisher.Mono;
  *
  */
 @Component
-@RestController
 public class TSDBMetricHandler {
 
 	private static final Logger LOG = LoggerFactory.getLogger(TSDBMetricHandler.class);
@@ -38,12 +39,13 @@ public class TSDBMetricHandler {
 		return ServerResponse.ok().body(request.bodyToMono(String.class), String.class);
 	}
 	
-//	@GetMapping("/resolve/{expression}")
+	
 	public Mono<ServerResponse> resolveGet(ServerRequest request) {
-		String foo = request.pathVariable("foo");
-		final Set<TSDBMetric> set = repo.resolveMetrics(foo).toStream().collect(Collectors.toSet());
+		String expression = request.pathVariable("expression");
+		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
 		return ServerResponse.ok().syncBody(JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()])));
 	}
+	
 	
 	public Mono<ServerResponse> resolvePut(ServerRequest request) {
 		return ServerResponse.ok().body(repo.resolveMetrics(request.bodyToMono(String.class)), TSDBMetric.class);		
