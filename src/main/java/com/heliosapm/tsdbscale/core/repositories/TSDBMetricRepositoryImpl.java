@@ -99,26 +99,31 @@ public class TSDBMetricRepositoryImpl implements TSDBMetricRepository {
 		return Flux.concat(RxReactiveStreams.toPublisher(ob));
 	}
 	
-	
+	// ==== HERE
 	public Flux<TSDBMetric> resolveMetrics(Mono<String> expression) {		
-		final AtomicReference<Publisher<TSDBMetric>> ref = new AtomicReference<Publisher<TSDBMetric>>(null); 
-		Flux<TSDBMetric> f = Flux.defer(new Supplier<Publisher<TSDBMetric>>(){
-			@Override
-			public Publisher<TSDBMetric> get() {
-				return ref.get();
-			}			
-		});
-		
-		expression.subscribe(exp -> {
-			LOG.info("Resolving expression [{}]", exp);
-			final Observable<TSDBMetric> ob = db.queryRows("select * from putMetrics(jsonb($1::text))", exp)
-				.map(r -> r.get(0, ObjectNode.class))
-				.map(o -> JSONOps.parseToObject(o, TSDBMetric.class));			
-			ref.set(RxReactiveStreams.toPublisher(ob));
-		});
-		return f;
+		return expression.flatMapMany(t -> {
+			Observable<TSDBMetric> ob = db.queryRows("select * from putMetrics(jsonb($1::text))", t)
+					.map(r -> r.get(0, ObjectNode.class))
+					.map(o -> JSONOps.parseToObject(o, TSDBMetric.class));	
+			LOG.info("Created TSDBMetric observer: {} for expression: {}", ob, t);
+			Flux<TSDBMetric> traced = Flux.concat(RxReactiveStreams.toPublisher(ob));	
+			return rtracer.trace(traced, "resolveMetrics", "TSDBMetricRepository");
+		});					
 	}
 	
+	@SuppressWarnings("unchecked")
+	public Mono<TSDBMetric> getMetric(String expression) {
+		final Observable<TSDBMetric> ob = db.queryRows("select * from putMetrics(jsonb($1::text))", expression)
+				.map(r -> r.get(0, ObjectNode.class))
+				.map(o -> JSONOps.parseToObject(o, TSDBMetric.class));			
+		
+		final Mono<TSDBMetric> traced = Mono.fromDirect(RxReactiveStreams.toPublisher(ob.toSingle())); 
+		return rtracer.trace(traced, "getMetric/" + expression, "TSDBMetricRepository");
+	}
+	
+	public Mono<TSDBMetric> getMetric(Mono<String> expression) {
+		return expression.flatMap(s -> getMetric(s));
+	}
 	
 	public Flux<TSDBMetric> resolveMetrics2(Mono<String> expression) {		
 		return expression.flatMapMany(new Function<String, Publisher<TSDBMetric>>() {

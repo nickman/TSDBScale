@@ -5,6 +5,7 @@ package com.heliosapm.tsdbscale.reactor;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
@@ -12,6 +13,7 @@ import java.util.function.BiConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.sleuth.Sampler;
 import org.springframework.cloud.sleuth.Span;
 import org.springframework.cloud.sleuth.TraceKeys;
 import org.springframework.cloud.sleuth.Tracer;
@@ -25,7 +27,7 @@ import reactor.core.publisher.Mono;
  *
  */
 @Component
-public class ReactorTrace {
+public class ReactorTrace implements Tracer {
 	
 	/** The tracing tag name for stringified exceptions */
 	public static final String ERROR_TAG_NAME = "err";
@@ -188,6 +190,120 @@ public class ReactorTrace {
 			}
 			tracer.close(tspan);						
 		});
+	}
+
+
+	/**
+	 * @return
+	 * @see org.springframework.cloud.sleuth.SpanAccessor#getCurrentSpan()
+	 */
+	public Span getCurrentSpan() {
+		return tracer.getCurrentSpan();
+	}
+
+
+	/**
+	 * @return
+	 * @see org.springframework.cloud.sleuth.SpanAccessor#isTracing()
+	 */
+	public boolean isTracing() {
+		Tracer t = this.tracer;
+		while(t instanceof ReactorTrace) {
+			t = ((ReactorTrace)t).tracer;
+		}
+		return t.isTracing();
+	}
+
+
+	/**
+	 * @param name
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#createSpan(java.lang.String)
+	 */
+	public Span createSpan(String name) {
+		return tracer.createSpan(name);
+	}
+
+
+	/**
+	 * @param name
+	 * @param parent
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#createSpan(java.lang.String, org.springframework.cloud.sleuth.Span)
+	 */
+	public Span createSpan(String name, Span parent) {
+		return tracer.createSpan(name, parent);
+	}
+
+
+	/**
+	 * @param name
+	 * @param sampler
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#createSpan(java.lang.String, org.springframework.cloud.sleuth.Sampler)
+	 */
+	public Span createSpan(String name, Sampler sampler) {
+		return tracer.createSpan(name, sampler);
+	}
+
+
+	/**
+	 * @param span
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#continueSpan(org.springframework.cloud.sleuth.Span)
+	 */
+	public Span continueSpan(Span span) {
+		return tracer.continueSpan(span);
+	}
+
+
+	/**
+	 * @param key
+	 * @param value
+	 * @see org.springframework.cloud.sleuth.Tracer#addTag(java.lang.String, java.lang.String)
+	 */
+	public void addTag(String key, String value) {
+		tracer.addTag(key, value);
+	}
+
+
+	/**
+	 * @param span
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#detach(org.springframework.cloud.sleuth.Span)
+	 */
+	public Span detach(Span span) {
+		return tracer.detach(span);
+	}
+
+
+	/**
+	 * @param span
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#close(org.springframework.cloud.sleuth.Span)
+	 */
+	public Span close(Span span) {
+		return tracer.close(span);
+	}
+
+
+	/**
+	 * @param callable
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#wrap(java.util.concurrent.Callable)
+	 */
+	public <V> Callable<V> wrap(Callable<V> callable) {
+		return tracer.wrap(callable);
+	}
+
+
+	/**
+	 * @param runnable
+	 * @return
+	 * @see org.springframework.cloud.sleuth.Tracer#wrap(java.lang.Runnable)
+	 */
+	public Runnable wrap(Runnable runnable) {
+		return tracer.wrap(runnable);
 	}
 	
 	

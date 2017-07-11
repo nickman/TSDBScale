@@ -50,7 +50,7 @@ import com.heliosapm.tsdbscale.util.JSONOps;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-@RestController
+//@RestController
 public class WelcomeController {
 	
 	private static final Logger LOG = LoggerFactory.getLogger(WelcomeController.class);

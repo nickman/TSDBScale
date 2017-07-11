@@ -3,53 +3,57 @@
  */
 package com.heliosapm.tsdbscale.core.handlers;
 
-import java.util.Set;
-import java.util.stream.Collectors;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.reactive.function.server.ServerRequest;
-import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
 import com.heliosapm.tsdbscale.core.repositories.TSDBMetricRepository;
-import com.heliosapm.tsdbscale.util.JSONOps;
 
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 /**
  * @author nwhitehead
  *
  */
-@Component
+//@RestController
+//@Component
+@RequestMapping("/metrics")
 public class TSDBMetricHandler {
 
 	private static final Logger LOG = LoggerFactory.getLogger(TSDBMetricHandler.class);
 	
 	@Autowired
 	protected TSDBMetricRepository repo = null;
+	
+//	@GetMapping(path = "/one/{expression}")
+    public Mono<TSDBMetric> get(@PathVariable("expression") String expression) {
+        return this.repo.getMetric(expression);
+    }	
 
+    public Flux<TSDBMetric> stream(ServerRequest request) {
+    	return repo.resolveMetrics(request.bodyToMono(String.class));
+    }
 	
-	public Mono<ServerResponse> echo(ServerRequest request) {
-		return ServerResponse.ok().body(request.bodyToMono(String.class), String.class);
-	}
-	
-	
-	public Mono<ServerResponse> resolveGet(ServerRequest request) {
-		String expression = request.pathVariable("expression");
-		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
-		return ServerResponse.ok().syncBody(JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()])));
-	}
-	
-	
-	public Mono<ServerResponse> resolvePut(ServerRequest request) {
-		return ServerResponse.ok().body(repo.resolveMetrics(request.bodyToMono(String.class)), TSDBMetric.class);		
-	}
+//	public Mono<ServerResponse> echo(ServerRequest request) {
+//		return ServerResponse.ok().body(request.bodyToMono(String.class), String.class);
+//	}
+//	
+//	
+//	public Mono<ServerResponse> resolveGet(ServerRequest request) {
+//		String expression = request.pathVariable("expression");
+//		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
+//		return ServerResponse.ok().syncBody(JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()])));
+//	}
+//	
+//	
+//	public Mono<ServerResponse> resolvePut(ServerRequest request) {
+//		return ServerResponse.ok().body(repo.resolveMetrics(request.bodyToMono(String.class)), TSDBMetric.class);		
+//	}
 //	
 //	@PostMapping("/resolve")
 //	public String resolvePut(@RequestBody final String expression) {

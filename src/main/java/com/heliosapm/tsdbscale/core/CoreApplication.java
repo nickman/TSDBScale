@@ -1,15 +1,11 @@
 package com.heliosapm.tsdbscale.core;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON;
-import static org.springframework.http.MediaType.TEXT_PLAIN;
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
 import static org.springframework.web.reactive.function.server.RequestPredicates.accept;
 import static org.springframework.web.reactive.function.server.RequestPredicates.contentType;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
-
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,9 +24,6 @@ import org.springframework.cloud.netflix.hystrix.dashboard.EnableHystrixDashboar
 import org.springframework.cloud.sleuth.SpanNamer;
 import org.springframework.cloud.sleuth.TraceKeys;
 import org.springframework.cloud.sleuth.Tracer;
-import org.springframework.cloud.sleuth.instrument.async.TraceableScheduledExecutorService;
-import org.springframework.cloud.sleuth.instrument.reactive.SpanSubscriber;
-import org.springframework.cloud.sleuth.instrument.reactive.TraceReactorAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -38,10 +31,9 @@ import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRep
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
 import org.springframework.retry.annotation.EnableRetry;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.RouterFunctions;
+import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
 import com.github.pgasync.ConnectionPoolBuilder;
@@ -54,14 +46,11 @@ import com.heliosapm.tsdbscale.core.converters.Converters.NumberArrayConverter;
 import com.heliosapm.tsdbscale.core.converters.Converters.TSDBMetricConverter;
 import com.heliosapm.tsdbscale.core.handlers.EchoHandler;
 import com.heliosapm.tsdbscale.core.handlers.TSDBMetricHandler;
+import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
 import com.heliosapm.tsdbscale.reactor.ReactorTrace;
 
-import reactor.core.publisher.Hooks;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 import reactor.ipc.netty.NettyContext;
 import reactor.ipc.netty.http.server.HttpServer;
-import reactor.util.context.Context;
 
 
 @SpringBootApplication(exclude = { MongoAutoConfiguration.class, MongoDataAutoConfiguration.class })
@@ -74,8 +63,7 @@ import reactor.util.context.Context;
 @EnableHystrixDashboard
 @Configuration
 @Import({
-	PGConfiguration.class,
-	TraceReactorAutoConfiguration.class
+	PGConfiguration.class
 })
 
 public class CoreApplication implements InitializingBean {
@@ -85,6 +73,7 @@ public class CoreApplication implements InitializingBean {
 	@Autowired Tracer tracer;
 	@Autowired TraceKeys traceKeys;
 	@Autowired SpanNamer spanNamer;
+	@Autowired ReactorTrace rtracer;
 	
 	
 	
@@ -118,16 +107,52 @@ public class CoreApplication implements InitializingBean {
 //	@GetMapping("/resolve/{expression}")
 //	public Mono<ServerResponse> resolveGet(@PathVariable("expression") Mono<String> expression) {
 	
-
 	@Bean
-	public RouterFunction<ServerResponse> monoRouterFunction(TSDBMetricHandler metricHandler) {
-		return route(GET("/resolve/{expression}").and(accept(APPLICATION_JSON)), metricHandler::resolveGet);
+	public TSDBMetricHandler metricHandler() {
+		return new TSDBMetricHandler();
+	}
+	
+	@Bean
+	public ReactiveServerRequestTraceFilter traceFilter() {
+		return new ReactiveServerRequestTraceFilter();
+	}
+
+	
+	
+	// .filter(traceFilter)
+	@Bean	
+	public RouterFunction<ServerResponse> monoRouterFunction(ReactiveServerRequestTraceFilter traceFilter, EchoHandler echoHandler, TSDBMetricHandler metricHandler) {
+		RouterFunction<ServerResponse> r = route(POST("/echo"), echoHandler::echo)		
+		.andRoute(GET("/metrics/one/{expression}") , sr -> {
+				return ServerResponse.ok().body(
+						metricHandler.get(sr.pathVariable("expression")),
+						TSDBMetric.class
+				);
+		})
+		.andRoute(GET("/metrics/one/{expression}")
+				.and(contentType(APPLICATION_JSON))
+				.and(accept(APPLICATION_JSON)), sr -> {
+					return ServerResponse.ok().body(
+							metricHandler.get(sr.pathVariable("expression")),
+							TSDBMetric.class
+					);
+			})
+		
+		.andRoute(POST("/metrics/stream")
+//				.and(contentType(TEXT_EVENT_STREAM))
+				.and(accept(APPLICATION_JSON)), sr -> {
+					return ServerResponse.ok().body(
+							metricHandler.stream(sr),
+							TSDBMetric.class
+					);
+		});
+		return r.filter(traceFilter);
 //		.andRoute(POST("/echo").and(contentType(TEXT_PLAIN)), echoHandler::echo)
 //		.andRoute(GET("/metrics"), metricHandler::resolveGet)
 //		.andRoute(POST("/metrics").and(contentType(APPLICATION_JSON)), metricHandler::resolvePut);
 	}	
 	
-	@Bean(destroyMethod="close")
+	@Bean(name="PgPool") //(destroyMethod="close")
 	public Db pgConnPool(PGConfiguration config) {
 		Db db = new ConnectionPoolBuilder()
 		.hostname(config.getHost())
@@ -138,7 +163,7 @@ public class CoreApplication implements InitializingBean {
 		.poolSize(config.getPoolSize())
 		.converters(new JsonNodeConverter(), new JsonArrayConverter(), new NumberArrayConverter(), new TSDBMetricConverter(), new JsonObjectConverter())
 		.build();
-		LOG.info("Provisioned AsyncPG Connection Pool: {}@{}:{}, pool size: {}", config.getUser(), config.getHost(), config.getPort(), config.getPoolSize());
+		LOG.info("Provisioned  AsyncPG Connection Pool: {}@{}:{}, pool size: {}", config.getUser(), config.getHost(), config.getPort(), config.getPoolSize());
 		return db;
 		
 	}
@@ -147,14 +172,16 @@ public class CoreApplication implements InitializingBean {
 	public HttpServer httpServer() {
 		HttpServer server = HttpServer.create(opt -> opt 
 			.listen("0.0.0.0", 8081)
-			.preferNative(true)			
+			.preferNative(true)		
+			.compression(true)
+//			.get().childOption(ChannelOption.ALLOCATOR, null)
 		);
 		LOG.info("HttpServer: {}", server);
 		return server;
 	}
 	
 	@Bean(name="NettyContext", destroyMethod="dispose")
-	public NettyContext nettyContext(HttpServer server, RouterFunction<ServerResponse> routerFunction) {
+	public NettyContext nettyContext(HttpServer server, RouterFunction<?> routerFunction) {
 		HttpHandler httpHandler = RouterFunctions.toHttpHandler(routerFunction);
 		ReactorHttpHandlerAdapter adapter = new ReactorHttpHandlerAdapter(httpHandler);
 		NettyContext ctx = server.newHandler(adapter).block();
@@ -172,20 +199,20 @@ public class CoreApplication implements InitializingBean {
 		
 	}
 	
-	public void setupHooks() {
-		Hooks.onNewSubscriber((pub, sub) ->
-				new SpanSubscriber(sub, Context.from(sub), this.tracer, pub.toString()));
-		Schedulers.setFactory(new Schedulers.Factory() {
-			@Override public ScheduledExecutorService decorateScheduledExecutorService(
-					String schedulerType,
-					Supplier<? extends ScheduledExecutorService> actual) {
-				return new TraceableScheduledExecutorService(actual.get(),
-						tracer,
-						traceKeys,
-						spanNamer);
-			}
-		});
-	}
+//	public void setupHooks() {
+//		Hooks.onNewSubscriber((pub, sub) ->
+//				new SpanSubscriber(sub, Context.from(sub), this.tracer, pub.toString()));
+//		Schedulers.setFactory(new Schedulers.Factory() {
+//			@Override public ScheduledExecutorService decorateScheduledExecutorService(
+//					String schedulerType,
+//					Supplier<? extends ScheduledExecutorService> actual) {
+//				return new TraceableScheduledExecutorService(actual.get(),
+//						tracer,
+//						traceKeys,
+//						spanNamer);
+//			}
+//		});
+//	}
 	
 }
 

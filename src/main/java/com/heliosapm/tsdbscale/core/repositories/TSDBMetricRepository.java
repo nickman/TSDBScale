@@ -3,8 +3,6 @@
  */
 package com.heliosapm.tsdbscale.core.repositories;
 
-import org.springframework.cloud.sleuth.SpanName;
-import org.springframework.cloud.sleuth.annotation.SpanTag;
 import org.springframework.scheduling.annotation.Async;
 
 import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
@@ -19,6 +17,9 @@ public interface TSDBMetricRepository {
 
 	public Flux<TSDBMetric> resolveMetrics(String expression);
 	public Mono<TSDBMetric> getMetric(long metricId);
+	
+	public Mono<TSDBMetric> getMetric(String expression);
+	public Mono<TSDBMetric> getMetric(Mono<String> expression);
 
 	public Flux<TSDBMetric> resolveMetrics(Mono<String> expression);
 	@Async
