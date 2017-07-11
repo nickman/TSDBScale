@@ -34,7 +34,6 @@ import org.springframework.cloud.sleuth.instrument.reactive.TraceReactorAutoConf
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.mongodb.core.SimpleMongoDbFactory;
 import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRepositories;
 import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.ReactorHttpHandlerAdapter;
@@ -53,6 +52,7 @@ import com.heliosapm.tsdbscale.core.converters.Converters.NumberArrayConverter;
 import com.heliosapm.tsdbscale.core.converters.Converters.TSDBMetricConverter;
 import com.heliosapm.tsdbscale.core.handlers.EchoHandler;
 import com.heliosapm.tsdbscale.core.handlers.TSDBMetricHandler;
+import com.heliosapm.tsdbscale.reactor.ReactorTrace;
 
 import reactor.core.publisher.Hooks;
 import reactor.core.scheduler.Schedulers;
@@ -83,6 +83,8 @@ public class CoreApplication implements InitializingBean {
 	@Autowired TraceKeys traceKeys;
 	@Autowired SpanNamer spanNamer;
 	
+	
+	
 
 	public static void main(String[] args) {
 		System.setProperty("spring.application.name", "tsdb-scale");
@@ -91,6 +93,8 @@ public class CoreApplication implements InitializingBean {
 		System.setProperty("spring.sleuth.sampler.percentage", "1.0");
 		
 		System.setProperty("spring.sleuth.reactor.enabled", "true");
+		
+		System.setProperty("spring.sleuth.rxjava.schedulers.hook.enabled", "true");
 		
 		AnsiOutput.setEnabled(Enabled.ALWAYS);
 		
@@ -102,6 +106,11 @@ public class CoreApplication implements InitializingBean {
 //	public SimpleMongoDbFactory mongoDbFactory() {
 //		return new SimpleMongoDbFactory();
 //	}
+	
+	@Bean
+	public ReactorTrace reactorTrace() {
+		return new ReactorTrace();
+	}
 
 	@Bean
 	public RouterFunction<ServerResponse> monoRouterFunction(EchoHandler echoHandler, TSDBMetricHandler metricHandler) {

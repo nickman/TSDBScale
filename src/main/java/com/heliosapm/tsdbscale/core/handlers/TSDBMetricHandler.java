@@ -46,7 +46,7 @@ public class TSDBMetricHandler {
 	}
 	
 	public Mono<ServerResponse> resolvePut(ServerRequest request) {
-		return ServerResponse.ok().body(repo.resolveMetrics3(request.bodyToMono(String.class)), TSDBMetric.class);		
+		return ServerResponse.ok().body(repo.resolveMetrics(request.bodyToMono(String.class)), TSDBMetric.class);		
 	}
 //	
 //	@PostMapping("/resolve")

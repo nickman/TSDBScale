@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class PGConfiguration {
 	/** The timescale postgres host name */
-	private String host = "192.168.1.190";
+	private String host = "localhost";
 	/** The timescale postgres listening port */
 	private int port = 5432;
 	/** The timescale postgres database name */
