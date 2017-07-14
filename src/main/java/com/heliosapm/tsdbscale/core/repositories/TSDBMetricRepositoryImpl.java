@@ -119,6 +119,7 @@ public class TSDBMetricRepositoryImpl implements TSDBMetricRepository {
 		
 		final Mono<TSDBMetric> traced = Mono.fromDirect(RxReactiveStreams.toPublisher(ob.toSingle())); 
 		return rtracer.trace(traced, "getMetric/" + expression, "TSDBMetricRepository");
+		//return traced;
 	}
 	
 	public Mono<TSDBMetric> getMetric(Mono<String> expression) {

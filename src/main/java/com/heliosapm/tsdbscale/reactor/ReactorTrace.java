@@ -15,8 +15,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.sleuth.Sampler;
 import org.springframework.cloud.sleuth.Span;
+import org.springframework.cloud.sleuth.SpanReporter;
 import org.springframework.cloud.sleuth.TraceKeys;
 import org.springframework.cloud.sleuth.Tracer;
+import org.springframework.cloud.sleuth.instrument.web.HttpTraceKeysInjector;
 import org.springframework.stereotype.Component;
 
 import reactor.core.publisher.Flux;
@@ -24,15 +26,18 @@ import reactor.core.publisher.Mono;
 
 /**
  * @author nwhitehead
- *
+ * TODO: trace builder
  */
 @Component
-public class ReactorTrace implements Tracer {
+public class ReactorTrace {
 	
 	/** The tracing tag name for stringified exceptions */
 	public static final String ERROR_TAG_NAME = "err";
 	/** The tracing tag name for the completion signal */
 	public static final String SIGNAL_TAG_NAME = "sig";
+	/** The tracing tag name for the thread  name */
+	public static final String THREAD_TAG_NAME = "thread";
+
 	/** The tracing tag name for (flux) time to first response */
 	public static final String TIME_TO_FIRST_TAG_NAME = "ttf";
 	/** The tracing tag name for (flux) time to last response */
@@ -53,6 +58,11 @@ public class ReactorTrace implements Tracer {
 	protected Tracer tracer;
 	@Autowired 
 	TraceKeys traceKeys;
+	@Autowired
+	protected SpanReporter spanReporter = null;
+	@Autowired
+	protected HttpTraceKeysInjector httpTraceKeysInjector = null;
+
 	
 	
 	/**
@@ -64,15 +74,29 @@ public class ReactorTrace implements Tracer {
 	 * @return the resulting mono
 	 */
 	
+	
+	private static String eval(Span spanA, Span spanB) {
+		if(spanA==spanB) {
+			return String.format("Same %s==%s", spanA, spanB);
+		} else {
+			return String.format("NOT Same %s==%s", spanA, spanB);
+		}
+	}
+	
 	public <T> Mono<T> trace(final Mono<T> target, final String spanName, final String componentName, @SuppressWarnings("unchecked") BiConsumer<Tracer, TraceKeys>...traceCustomizers) {
 		if(!tracer.isTracing()) return target;
+		final Span[] priorSpan = new Span[1];
 		final Span[] span = new Span[1];
 		
 		return target.doOnSubscribe(s -> {
-			if(LOG.isDebugEnabled()) LOG.debug("Enabled mono trace: component={}, span={}", spanName, componentName);
-			final Span sp = tracer.createSpan(spanName, tracer.getCurrentSpan());
-			tracer.detach(sp);
-			span[0] = sp;
+			priorSpan[0] = tracer.getCurrentSpan();
+			//tracer.detach(priorSpan[0]);
+			if(LOG.isDebugEnabled()) LOG.debug("Enabled mono trace: component={}, span={}", componentName, spanName);			
+			final Span sp = tracer.createSpan(spanName, priorSpan[0]);			
+			sp.tag(Span.SPAN_LOCAL_COMPONENT_TAG_NAME, componentName);
+			tracer.detach(sp);  // We created the span, but it's not for use in this thread			
+			priorSpan[0] = tracer.continueSpan(priorSpan[0]); // resuming the original span
+			span[0] = sp;  // Save a reference to the span we created
 		})
 		.doOnError(t -> {
 			Span tspan = tracer.continueSpan(span[0]);
@@ -85,19 +109,16 @@ public class ReactorTrace implements Tracer {
 		})
 		.doFinally(sig -> {
 			Span tspan = tracer.continueSpan(span[0]);
-			this.tracer.addTag(SIGNAL_TAG_NAME, sig.name());
-			this.tracer.addTag(this.traceKeys.getAsync().getPrefix()
-					+ this.traceKeys.getAsync().getThreadNameKey(), Thread.currentThread().getName());
+			tspan.tag(SIGNAL_TAG_NAME, sig.name());
+			tspan.tag(THREAD_TAG_NAME, Thread.currentThread().getName());
 			if(traceCustomizers!=null) {
 				for(BiConsumer<Tracer, TraceKeys> custom: traceCustomizers) {
 					if(custom!=null) {
 						custom.accept(tracer, traceKeys);
 					}
 				}
-			}
-			if (!tspan.tags().containsKey(Span.SPAN_LOCAL_COMPONENT_TAG_NAME)) {
-				this.tracer.addTag(Span.SPAN_LOCAL_COMPONENT_TAG_NAME, componentName);
-			}
+			} 
+			LOG.info("Closing span {}/{}", componentName, spanName);
 			tracer.close(tspan);						
 		});
 	}
@@ -194,120 +215,43 @@ public class ReactorTrace implements Tracer {
 
 
 	/**
-	 * @return
-	 * @see org.springframework.cloud.sleuth.SpanAccessor#getCurrentSpan()
+	 * @return the tracer
 	 */
-	public Span getCurrentSpan() {
-		return tracer.getCurrentSpan();
+	public Tracer getTracer() {
+		return tracer;
 	}
+
+	/**
+	 * @return the tracer
+	 */
+	public Tracer tracer() {
+		return tracer;
+	}
+
 
 
 	/**
-	 * @return
-	 * @see org.springframework.cloud.sleuth.SpanAccessor#isTracing()
+	 * @return the traceKeys
 	 */
-	public boolean isTracing() {
-		Tracer t = this.tracer;
-		while(t instanceof ReactorTrace) {
-			t = ((ReactorTrace)t).tracer;
-		}
-		return t.isTracing();
+	public TraceKeys getTraceKeys() {
+		return traceKeys;
 	}
-
 
 	/**
-	 * @param name
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#createSpan(java.lang.String)
+	 * @return the traceKeys
 	 */
-	public Span createSpan(String name) {
-		return tracer.createSpan(name);
+	public TraceKeys traceKeys() {
+		return traceKeys;
 	}
-
 
 	/**
-	 * @param name
-	 * @param parent
 	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#createSpan(java.lang.String, org.springframework.cloud.sleuth.Span)
 	 */
-	public Span createSpan(String name, Span parent) {
-		return tracer.createSpan(name, parent);
+	public SpanReporter spanReporter() {
+		return spanReporter;
 	}
 
-
-	/**
-	 * @param name
-	 * @param sampler
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#createSpan(java.lang.String, org.springframework.cloud.sleuth.Sampler)
-	 */
-	public Span createSpan(String name, Sampler sampler) {
-		return tracer.createSpan(name, sampler);
+	public HttpTraceKeysInjector keysInjector() {
+		return httpTraceKeysInjector;
 	}
-
-
-	/**
-	 * @param span
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#continueSpan(org.springframework.cloud.sleuth.Span)
-	 */
-	public Span continueSpan(Span span) {
-		return tracer.continueSpan(span);
-	}
-
-
-	/**
-	 * @param key
-	 * @param value
-	 * @see org.springframework.cloud.sleuth.Tracer#addTag(java.lang.String, java.lang.String)
-	 */
-	public void addTag(String key, String value) {
-		tracer.addTag(key, value);
-	}
-
-
-	/**
-	 * @param span
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#detach(org.springframework.cloud.sleuth.Span)
-	 */
-	public Span detach(Span span) {
-		return tracer.detach(span);
-	}
-
-
-	/**
-	 * @param span
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#close(org.springframework.cloud.sleuth.Span)
-	 */
-	public Span close(Span span) {
-		return tracer.close(span);
-	}
-
-
-	/**
-	 * @param callable
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#wrap(java.util.concurrent.Callable)
-	 */
-	public <V> Callable<V> wrap(Callable<V> callable) {
-		return tracer.wrap(callable);
-	}
-
-
-	/**
-	 * @param runnable
-	 * @return
-	 * @see org.springframework.cloud.sleuth.Tracer#wrap(java.lang.Runnable)
-	 */
-	public Runnable wrap(Runnable runnable) {
-		return tracer.wrap(runnable);
-	}
-	
-	
-	
-	
-	
 }

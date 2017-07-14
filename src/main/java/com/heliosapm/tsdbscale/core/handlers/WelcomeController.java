@@ -50,7 +50,7 @@ import com.heliosapm.tsdbscale.util.JSONOps;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-//@RestController
+@RestController
 public class WelcomeController {
 	
 	private static final Logger LOG = LoggerFactory.getLogger(WelcomeController.class);
@@ -77,19 +77,19 @@ public class WelcomeController {
 	}
 
 	
-	@GetMapping("/resolve/{expression}")
-	public Mono<ServerResponse> resolveGet(@PathVariable("expression") String expression) {
-		
-		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
-		return ServerResponse.ok().syncBody(JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()])));
-	}
-	
-	
-//	@GetMapping("/resolve/{expression}")
-//	public String resolveGet(@PathVariable("expression") final String expression) {
+//	@GetMapping(path="/resolve/{expression}", produces = "application/json")
+//	public Mono<ServerResponse> resolveGet(@PathVariable("expression") String expression) {
+//		
 //		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
-//		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
+//		return ServerResponse.ok().syncBody(JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()])));
 //	}
+	
+	
+	@GetMapping("/resolve/{expression}")
+	public String resolveGet(@PathVariable("expression") final String expression) {
+		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
+		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
+	}
 	
 	@PostMapping("/resolve")
 	public String resolvePut(@RequestBody final String expression) {

@@ -7,6 +7,7 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.web.reactive.function.server.RequestPredicates.contentType;
 import static org.springframework.web.reactive.function.server.RouterFunctions.route;
 
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -49,6 +50,7 @@ import com.heliosapm.tsdbscale.core.handlers.TSDBMetricHandler;
 import com.heliosapm.tsdbscale.core.metrics.TSDBMetric;
 import com.heliosapm.tsdbscale.reactor.ReactorTrace;
 
+import reactor.core.publisher.Mono;
 import reactor.ipc.netty.NettyContext;
 import reactor.ipc.netty.http.server.HttpServer;
 
@@ -87,6 +89,7 @@ public class CoreApplication implements InitializingBean {
 		System.setProperty("spring.sleuth.reactor.enabled", "true");
 		
 		System.setProperty("spring.sleuth.rxjava.schedulers.hook.enabled", "true");
+		System.setProperty("server.port", "8888");
 		
 		AnsiOutput.setEnabled(Enabled.ALWAYS);
 		
@@ -116,41 +119,79 @@ public class CoreApplication implements InitializingBean {
 	public ReactiveServerRequestTraceFilter traceFilter() {
 		return new ReactiveServerRequestTraceFilter();
 	}
-
-	
-	
-	// .filter(traceFilter)
 	@Bean	
 	public RouterFunction<ServerResponse> monoRouterFunction(ReactiveServerRequestTraceFilter traceFilter, EchoHandler echoHandler, TSDBMetricHandler metricHandler) {
-		RouterFunction<ServerResponse> r = route(POST("/echo"), echoHandler::echo)		
-		.andRoute(GET("/metrics/one/{expression}") , sr -> {
+		RouterFunction<ServerResponse> r =  
+//				route(POST("/echo"), echoHandler::echo)
+//		.filter(traceFilter)
+		route(GET("/metrics/one/{expression}") , sr -> {				
 				return ServerResponse.ok().body(
 						metricHandler.get(sr.pathVariable("expression")),
 						TSDBMetric.class
 				);
 		})
-		.andRoute(GET("/metrics/one/{expression}")
-				.and(contentType(APPLICATION_JSON))
-				.and(accept(APPLICATION_JSON)), sr -> {
-					return ServerResponse.ok().body(
-							metricHandler.get(sr.pathVariable("expression")),
-							TSDBMetric.class
-					);
-			})
-		
-		.andRoute(POST("/metrics/stream")
-//				.and(contentType(TEXT_EVENT_STREAM))
-				.and(accept(APPLICATION_JSON)), sr -> {
-					return ServerResponse.ok().body(
-							metricHandler.stream(sr),
-							TSDBMetric.class
-					);
+		.filter((request, next) -> { 
+			
+			Mono<ServerResponse> sr = traceFilter.filter(request, next);
+			return sr;
+			
 		});
-		return r.filter(traceFilter);
+//		.andRoute(GET("/metrics/one/{expression}")
+//				.and(contentType(APPLICATION_JSON))
+//				.and(accept(APPLICATION_JSON)), sr -> {
+//					return ServerResponse.ok().body(
+//							metricHandler.get(sr.pathVariable("expression")),
+//							TSDBMetric.class
+//					);
+//			})
+//		
+//		.andRoute(POST("/metrics/stream")
+//				.and(contentType(APPLICATION_JSON))
+//				.and(accept(APPLICATION_JSON)), sr -> {
+//					return ServerResponse.ok().body(
+//							metricHandler.stream(sr),
+//							TSDBMetric.class
+//					);
+//		});
+		return r;
 //		.andRoute(POST("/echo").and(contentType(TEXT_PLAIN)), echoHandler::echo)
 //		.andRoute(GET("/metrics"), metricHandler::resolveGet)
 //		.andRoute(POST("/metrics").and(contentType(APPLICATION_JSON)), metricHandler::resolvePut);
 	}	
+	
+//	@Bean	
+//	public RouterFunction<ServerResponse> monoRouterFunction(EchoHandler echoHandler, TSDBMetricHandler metricHandler) {
+//		RouterFunction<ServerResponse> r = route(POST("/echo"), echoHandler::echo)		
+//		.andRoute(GET("/metrics/one/{expression}") , sr -> {
+//				return ServerResponse.ok().body(
+//						metricHandler.get(sr.pathVariable("expression")),
+//						TSDBMetric.class
+//				);
+//		})
+//		.andRoute(GET("/metrics/one/{expression}")
+//				.and(contentType(APPLICATION_JSON))
+//				.and(accept(APPLICATION_JSON)), sr -> {
+//					return ServerResponse.ok().body(
+//							metricHandler.get(sr.pathVariable("expression")),
+//							TSDBMetric.class
+//					);
+//			})
+//		
+//		.andRoute(POST("/metrics/stream")
+//				.and(contentType(APPLICATION_JSON))
+//				.and(accept(APPLICATION_JSON)), sr -> {
+//					return ServerResponse.ok().body(
+//							metricHandler.stream(sr),
+//							TSDBMetric.class
+//					);
+//		});
+////		return r;
+//		return r;
+////		.andRoute(POST("/echo").and(contentType(TEXT_PLAIN)), echoHandler::echo)
+////		.andRoute(GET("/metrics"), metricHandler::resolveGet)
+////		.andRoute(POST("/metrics").and(contentType(APPLICATION_JSON)), metricHandler::resolvePut);
+//	}	
+	
 	
 	@Bean(name="PgPool") //(destroyMethod="close")
 	public Db pgConnPool(PGConfiguration config) {
@@ -171,7 +212,7 @@ public class CoreApplication implements InitializingBean {
 	@Bean("HttpServer")
 	public HttpServer httpServer() {
 		HttpServer server = HttpServer.create(opt -> opt 
-			.listen("0.0.0.0", 8081)
+			.listen("0.0.0.0", 8088)
 			.preferNative(true)		
 			.compression(true)
 //			.get().childOption(ChannelOption.ALLOCATOR, null)

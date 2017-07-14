@@ -6,6 +6,7 @@ package com.heliosapm.tsdbscale.core.handlers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.sleuth.Tracer;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.reactive.function.server.ServerRequest;
@@ -29,6 +30,8 @@ public class TSDBMetricHandler {
 	
 	@Autowired
 	protected TSDBMetricRepository repo = null;
+	@Autowired
+	protected Tracer tracer = null;
 	
 //	@GetMapping(path = "/one/{expression}")
     public Mono<TSDBMetric> get(@PathVariable("expression") String expression) {
