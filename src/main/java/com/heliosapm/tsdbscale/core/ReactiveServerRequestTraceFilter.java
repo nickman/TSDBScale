@@ -17,8 +17,6 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.regex.Pattern;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +40,7 @@ import org.springframework.web.reactive.function.server.HandlerFunction;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 
-import com.esotericsoftware.minlog.Log;
+
 import com.heliosapm.tsdbscale.reactor.ReactorTrace;
 
 import reactor.core.publisher.Mono;
@@ -103,14 +101,14 @@ public class ReactiveServerRequestTraceFilter implements HandlerFilterFunction<S
 //	@Override
 	public Mono<ServerResponse> filterX(ServerRequest request, HandlerFunction<ServerResponse> next) {	
 		Span incomingSpan = extractor.joinTrace(new ServerRequestSpanTextMap(request));
-		final Span span = rtracer.getTracer().createSpan("in-reactive-http:/" + request.uri().toString(), incomingSpan);
+		final Span span = rtracer.tracer().createSpan("in-reactive-http:/" + request.uri().toString(), incomingSpan);
 		Mono<ServerResponse> upresponse = next.handle(request);	
 		Mono<ServerResponse> response = rtracer.trace(upresponse, "out-reactive-http:/" + request.uri().toString() , "ReactiveHTTPServer");
 		return response.doFinally(sig -> {
-			rtracer.getTracer().continueSpan(span);
+			rtracer.tracer().continueSpan(span);
 			span.tag("sig", sig.name());
 			span.tag("thread", Thread.currentThread().getName());
-			rtracer.getTracer().close(span);
+			rtracer.tracer().close(span);
 		});
 	}
 	
@@ -387,11 +385,11 @@ public class ReactiveServerRequestTraceFilter implements HandlerFilterFunction<S
 		/** Override to add annotations not defined in {@link TraceKeys}. */
 		protected void addResponseTags(ServerResponse response, Throwable e) {
 			int httpStatus = response.statusCode().value();
-			if (httpStatus == HttpServletResponse.SC_OK && e != null) {
+			if (httpStatus == HttpStatus.OK.value() && e != null) {
 				// Filter chain threw exception but the response status may not have been set
 				// yet, so we have to guess.
 				rtracer.tracer().addTag(rtracer.traceKeys().getHttp().getStatusCode(),
-						String.valueOf(HttpServletResponse.SC_INTERNAL_SERVER_ERROR));
+						String.valueOf(HttpStatus.INTERNAL_SERVER_ERROR));
 			}
 			// only tag valid http statuses
 			else if (httpStatus >= 100 && (httpStatus < 200) || (httpStatus > 399)) {
@@ -407,7 +405,7 @@ public class ReactiveServerRequestTraceFilter implements HandlerFilterFunction<S
 		}
 
 		private void continueSpan(ServerRequest request, Span spanFromRequest) {
-			rtracer.getTracer().continueSpan(spanFromRequest);
+			rtracer.tracer().continueSpan(spanFromRequest);
 			request.attributes().put(TraceRequestAttributes.SPAN_CONTINUED_REQUEST_ATTR, "true");
 			if (log.isDebugEnabled()) {
 				log.debug("There has already been a span in the request " + spanFromRequest);

@@ -3,6 +3,7 @@
  */
 package com.heliosapm.tsdbscale.reactor;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -32,9 +33,9 @@ import reactor.core.publisher.Mono;
 public class ReactorTrace {
 	
 	/** The tracing tag name for stringified exceptions */
-	public static final String ERROR_TAG_NAME = "err";
+	public static final String ERROR_TAG_NAME = Span.SPAN_ERROR_TAG_NAME;
 	/** The tracing tag name for the completion signal */
-	public static final String SIGNAL_TAG_NAME = "sig";
+	public static final String SIGNAL_TAG_NAME = "signal";
 	/** The tracing tag name for the thread  name */
 	public static final String THREAD_TAG_NAME = "thread";
 
@@ -47,9 +48,17 @@ public class ReactorTrace {
 	/** The tracing tag name for the (flux)  number of responses */
 	public static final String RESPONSE_COUNT_TAG_NAME = "rc";
 	
+	public static final Set<String> SPAN_HEADERS;
+	
 	public static final int FLUX_TIME_START = 0;
 	public static final int FLUX_TIME_FIRST = 1;
 	public static final int FLUX_TIME_LAST = 2;
+	
+	
+	static {
+		Set<String> headers = new HashSet<String>(Span.SPAN_HEADERS);
+		SPAN_HEADERS = Collections.unmodifiableSet(headers);
+	}
 	
 	
 	
@@ -213,28 +222,11 @@ public class ReactorTrace {
 		});
 	}
 
-
-	/**
-	 * @return the tracer
-	 */
-	public Tracer getTracer() {
-		return tracer;
-	}
-
 	/**
 	 * @return the tracer
 	 */
 	public Tracer tracer() {
 		return tracer;
-	}
-
-
-
-	/**
-	 * @return the traceKeys
-	 */
-	public TraceKeys getTraceKeys() {
-		return traceKeys;
 	}
 
 	/**
@@ -254,4 +246,7 @@ public class ReactorTrace {
 	public HttpTraceKeysInjector keysInjector() {
 		return httpTraceKeysInjector;
 	}
+	
+	
+	
 }

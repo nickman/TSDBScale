@@ -92,8 +92,7 @@ public class WelcomeController {
 	}
 	
 	@PostMapping("/resolve")
-	public String resolvePut(@RequestBody final String expression) {
-		
+	public String resolvePut(@RequestBody final String expression) {		
 		final Set<TSDBMetric> set = repo.resolveMetrics(expression).toStream().collect(Collectors.toSet());
 		return JSONOps.serializeToString(set.toArray(new TSDBMetric[set.size()]));
 	}

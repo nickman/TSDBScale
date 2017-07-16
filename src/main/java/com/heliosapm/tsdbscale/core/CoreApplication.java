@@ -21,7 +21,7 @@ import org.springframework.boot.autoconfigure.data.mongo.MongoDataAutoConfigurat
 import org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.netflix.hystrix.EnableHystrix;
-import org.springframework.cloud.netflix.hystrix.dashboard.EnableHystrixDashboard;
+
 import org.springframework.cloud.sleuth.SpanNamer;
 import org.springframework.cloud.sleuth.TraceKeys;
 import org.springframework.cloud.sleuth.Tracer;
@@ -62,7 +62,7 @@ import reactor.ipc.netty.http.server.HttpServer;
 @EnableDiscoveryClient
 @EnableAutoConfiguration
 @EnableHystrix
-@EnableHystrixDashboard
+
 @Configuration
 @Import({
 	PGConfiguration.class

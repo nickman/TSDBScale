@@ -423,6 +423,38 @@ public class JSONOps {
 		      throw new JSONException(e);
 		    }
 		  }
+		  
+		  /**
+		   * Deserializes a JSON formatted string to a specific type reference<b>Note:</b> If you get mapping exceptions you may
+		   * need to provide a TypeReference
+		   * 
+		   * @param json
+		   *          The string to deserialize
+		   * @param pojo
+		   *          The type reference of the object used for deserialization
+		   * @return An object of the {@code pojo} type
+		   * @throws IllegalArgumentException
+		   *           if the data or class was null or parsing failed
+		   * @throws JSONException
+		   *           if the data could not be parsed
+		   */
+		  public static final <T> T parseToObject(final String json, final TypeReference<T> pojo) {
+		    if (json == null || json.isEmpty())
+		      throw new IllegalArgumentException("Incoming data was null or empty");
+		    if (pojo == null)
+		      throw new IllegalArgumentException("Missing type reference");
+
+		    try {
+		      return jsonMapper.readValue(json, pojo);
+		    } catch (JsonParseException e) {
+		      throw new IllegalArgumentException(e);
+		    } catch (JsonMappingException e) {
+		      throw new IllegalArgumentException(e);
+		    } catch (IOException e) {
+		      throw new JSONException(e);
+		    }
+		  }
+		  
 
 		  /**
 		   * Registers a deser for the passed class
